@@ -1,0 +1,66 @@
+<!doctype html>
+<!--
+Hummingbird, real-time Three.js. Built for Vincent Strader from Theo Tillberg's
+"12 / Feather" (Codevember 2026): https://github.com/ttillberg/codevember-2026/tree/main/12
+Original live demo: https://ttillberg.github.io/codevember-2026/12/
+Changes in this build: one offline file (perch model inlined), plus Animation speed,
+Time of day, Slow camera drift and Performance mode controls in the settings card.
+Added for Vincent (Nov 2026): synthesized bird sound (Web Audio, no audio files); two more
+birds, an American robin (songbird) and an American goldfinch (finch), modeled procedurally
+in code for this build (no third-party models or textures), each with its own flight;
+a bird picker; and the hummingbird now flies tours round the scene between hover points.
+
+The original code is used under its MIT License:
+
+MIT License
+
+Copyright (c) 2026 Theo Tillberg
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#1d3320" />
+    <title>Hummingbird, robin and goldfinch · after Theo Tillberg</title>
+    <meta name="description" content="A rigged hummingbird, perched, with iridescent feathers" />
+    <!-- share image: 12/about/screengrab.png, copied next to the build by scripts/build.mjs -->
+    <meta property="og:title" content="12 · Feather · Codevember 2026" />
+    <meta property="og:description" content="A rigged hummingbird, perched, with iridescent feathers" />
+    <meta property="og:image" content="https://ttillberg.github.io/codevember-2026/12/screengrab.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="1200" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" href="data:," />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@600;700&family=Inter:wght@400;500;600&display=swap" />
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body class="loading">
+    <canvas id="c" class="pending"></canvas>
+    <a class="back" href="https://ttillberg.github.io/codevember-2026/12/">Feather, by Theo Tillberg</a>
+    <div class="plate"><div class="head"><b class="bird-name">Hummingbird</b><i><a class="home" href="https://github.com/ttillberg/codevember-2026/tree/main/12">hummingbird after Theo Tillberg, Codevember 2026 (MIT)</a> · robin and goldfinch modeled in code for this build</i><i class="loading-label">Loading <span>…</span></i></div></div>
+    <button class="fs" type="button" aria-label="Full screen, no text"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path class="in" d="M1.5 5.5v-4h4M10.5 1.5h4v4M14.5 10.5v4h-4M5.5 14.5h-4v-4" /><path class="out" d="M5.5 1.5v4h-4M14.5 5.5h-4v-4M10.5 14.5v-4h4M1.5 10.5h4v4" /></svg></button>
+    <button class="gyro" type="button" aria-label="Tilt the phone to look around" aria-pressed="false"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="3.5" width="8" height="17" rx="2" transform="rotate(-18 12 12)" /><path d="M3 8.5a10 10 0 0 0 0 7M21 8.5a10 10 0 0 1 0 7" /></svg></button>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>
