@@ -1,12 +1,20 @@
 // Two more birds for Vincent's scene: an American robin (the songbird) and an American goldfinch.
-// Built here from scratch, procedurally (no outside models): lofted body and head with painted
-// plumage, a bill that opens, eyes, and wings made of separate feathers on a three-bone arm
+// The flight and behaviour rig is built here from scratch; what you see is drawn by Theo Tillberg's
+// feather system (MIT, see songbirdSpecies.ts) on a songbird body. The rig itself has a lofted body, a bill that opens, eyes, and wings made of separate feathers on a three-bone arm
 // (upper arm, forearm, hand) that folds against the body when perched and opens to beat in flight.
 // The robin flies with steady flaps and short glides; the goldfinch flies the finch's bounding
 // flight: a burst of flaps, then wings shut, rising and falling in loops. Both perch, hop, look
 // about, flick their tails, sing (the bill moves with the bursts the sound plays), and fly a
 // route round the scene before landing on the twig again.
 import * as THREE from 'three';
+import { createBird, type BirdHandle, type HopLayer, type Pose } from '../bird';
+import { ROBIN as ROBIN_SPECIES, GOLDFINCH as GOLDFINCH_SPECIES } from './songbirdSpecies';
+
+/** size of the feathered model inside the old rig's root (which is scaled by spec.scale) */
+/** heading that faces the default camera */
+const VIEW_YAW = 0.48;
+
+export const FEATHER_SCALE: Record<'robin' | 'goldfinch', number> = { robin: 0.76, goldfinch: 0.62 };
 
 export type SmallKind = 'robin' | 'goldfinch';
 
@@ -406,8 +414,9 @@ export class SmallBird {
   private st = 0; // time in state
   private x = 0; // on the perch
   private frame: PerchFrame = { point: new THREE.Vector3(), up: new THREE.Vector3(0, 1, 0), tangent: new THREE.Vector3(1, 0, 0), radius: 0.03 };
-  private yaw = 0.5;
-  private yawGoal = 0.5;
+  // perched three-quarter to the default camera (which sits at yaw ~0.48 from the twig), like the hummingbird
+  private yaw = VIEW_YAW - 0.95;
+  private yawGoal = VIEW_YAW - 0.95;
   private headYaw = 0;
   private headPitch = 0;
   private headGoal = new THREE.Vector2();
@@ -434,6 +443,10 @@ export class SmallBird {
   /** the song: what the sound plays from, and the bill opens with */
   readonly mouth = { singFrom: -10, singFor: 0, bursts: [] as { at: number; notes: number; hz: number; amp: number }[] };
   active = false;
+  /** the bird you see: the hummingbird's feather system on a songbird's body, posed from this rig */
+  readonly feathered: BirdHandle;
+  private holder = new THREE.Group();
+  private drive = { pitch: 0, crouch: 0, tailPitch: 0, tailFan: 0, flick: 0, open: 0, wing: false, spread: 0, raise: 0, sweep: 0, air: false, grip: 1 };
 
   constructor(kind: SmallKind, private env: SmallEnv) {
     this.kind = kind;
@@ -501,6 +514,40 @@ export class SmallBird {
       this.legs.push({ leg, toes });
     }
     this.root.visible = false;
+    // --- the feathered model: the old meshes stay as the rig it follows, hidden
+    this.body.visible = false;
+    this.head.visible = false;
+    for (const L of this.legs) L.leg.visible = L.toes.visible = false;
+    const fb = (this.feathered = createBird({ species: kind === 'robin' ? ROBIN_SPECIES : GOLDFINCH_SPECIES }));
+    fb.root.name = kind + '.feathered';
+    fb.layer<HopLayer>('hop').hold = true; // this rig does the hopping
+    const flee = fb.layer('flee') as unknown as { every: [number, number]; nextAt: number };
+    flee.every = [1e9, 1e9];
+    flee.nextAt = 1e9; // and the flying
+    this.holder.scale.setScalar(FEATHER_SCALE[kind] / sp.scale);
+    this.holder.add(fb.root);
+    this.root.add(this.holder);
+    fb.onPose = (p) => this.poseFeathered(p);
+  }
+
+  /** the rig's state, written into the feathered bird's pose channels */
+  private poseFeathered(p: Pose) {
+    const d = this.drive;
+    p.bodyPitch += d.pitch;
+    p.bodyShift.y -= 0.05 * d.crouch;
+    p.tailPitch += d.tailPitch;
+    p.tailFan = Math.max(p.tailFan, d.tailFan);
+    p.jaw = Math.max(p.jaw, d.open * 0.9);
+    if (d.open > 0) p.headPitch += 0.12 * d.open;
+    if (d.air) p.grip = Math.min(p.grip, d.grip);
+    if (d.wing) {
+      for (const s of ['L', 'R'] as const) {
+        const w = p.wing[s];
+        w.spread = d.spread;
+        w.raise = d.raise;
+        w.sweep = d.sweep;
+      }
+    }
   }
 
   private buildBill() {
@@ -653,7 +700,7 @@ export class SmallBird {
     return true;
   }
   headPosition(out: THREE.Vector3) {
-    return this.head.getWorldPosition(out);
+    return this.feathered.headPosition(out);
   }
   private go(s: State) {
     this.state = s;
@@ -719,7 +766,7 @@ export class SmallBird {
           let to = this.x + (Math.random() < 0.5 ? -1 : 1) * rand(0.1, 0.22);
           if (to < a + 0.05 || to > b - 0.05) to = this.x - (to - this.x);
           this.hopTo = clamp(to, a, b);
-          if (Math.random() < 0.35) this.yawGoal = -this.yawGoal;
+          if (Math.random() < 0.35) this.yawGoal = 2 * VIEW_YAW - this.yawGoal;
           this.nextHop = this.t + rand(2.5, 6);
           this.go('hop');
         }
@@ -899,6 +946,28 @@ export class SmallBird {
     // wings
     this.fold = damp(this.fold, foldGoal, this.state === 'fly' ? 40 : 14, dt);
     for (const w of this.wings) poseWing(w, this.fold, lerp(wingRoll, -1.38, this.fold), sweep * (1 - this.fold), twist * (1 - this.fold));
+    {
+      const d = this.drive;
+      const air = this.state === 'fly' || this.state === 'land';
+      d.air = air;
+      d.grip = air ? (this.state === 'land' ? sstep(0.6, 1, clamp(this.st / 0.75, 0, 1)) : 0) : 1;
+      d.pitch = (bodyPitch - sp.perchPitch) * 1.35;
+      d.crouch = crouch;
+      d.tailPitch = fl * 0.7 + (air ? 0.25 : 0) - (tailPitch - 0.08) * 0.6;
+      d.tailFan = tailFan * 0.9;
+      d.open = open;
+      const spread = clamp(1 - this.fold, 0, 1);
+      d.wing = spread > 0.03 || air;
+      d.spread = spread;
+      d.raise = wingRoll * 0.9;
+      d.sweep = sweep;
+      const fb = this.feathered;
+      fb.root.position.set(0, 0, 0);
+      fb.root.quaternion.identity();
+      fb.update(dt);
+      fb.root.position.set(0, 0, 0);
+      fb.root.quaternion.identity();
+    }
     this.root.updateMatrixWorld(true);
     // legs: from the foot (on the twig) up into the belly; tucked back in flight
     const hipBase = new THREE.Vector3();
@@ -923,7 +992,7 @@ export class SmallBird {
     if (this.leg === this.route.length) {
       // choose the landing spot once
       this.placeAt(this.env.home + rand(-0.15, 0.15));
-      this.yawGoal = (Math.random() < 0.5 ? -1 : 1) * rand(0.45, 0.75);
+      this.yawGoal = VIEW_YAW + (Math.random() < 0.5 ? -1 : 1) * rand(0.8, 1.1);
       this.leg++;
     }
     const p = this.frame.point;

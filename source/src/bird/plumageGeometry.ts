@@ -846,7 +846,7 @@ function addRestWing(b: Builder, rig: Rig, side: Side, rng: Rng) {
       const size = 0.85 + rng() * 0.3;
       const skin = lay(u + (rng() - 0.5) * 0.012, v, len * size, -v * 0.12 + (rng() - 0.5) * 0.1, 0.004 + f * 0.004, 7 + rng() * 5);
       b.add({
-        ...specFromLook(covert, rng, 0.8 + 0.4 * rng()),
+        ...specFromLook((W.covertRows && species.looks[W.covertRows[r]]) || covert, rng, 0.8 + 0.4 * rng()),
         root,
         dir,
         normal: nrm,

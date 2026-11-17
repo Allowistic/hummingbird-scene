@@ -622,6 +622,7 @@ let branchFuzz: THREE.Object3D | null = null;
 const birdFuzz = !query.has('nofuzz') && !query.has('skin');
 function applyFuzz() {
   bird.feathers.fuzz.visible = fuzzVisible && birdFuzz && !perfMode;
+  for (const b of Object.values(small)) b.feathered.feathers.fuzz.visible = fuzzVisible && birdFuzz && !perfMode;
   if (branchFuzz) branchFuzz.visible = fuzzVisible && !perfMode;
 }
 const flash0 = bird.plumage.uFlash.value;
@@ -762,7 +763,7 @@ const sound = initSound({
   get speed() { return speed; },
 });
 (window as unknown as { __cam: unknown }).__cam = camera;
-(window as unknown as { __birds: unknown }).__birds = { small, bird, get active() { return activeBird; }, setBird, sound, flee: activeFlee, pause: (on: boolean) => setPaused(on) };
+(window as unknown as { __birds: unknown }).__birds = { small, bird, camera, controls, setPerf, get active() { return activeBird; }, setBird, sound, flee: activeFlee, pause: (on: boolean) => setPaused(on) };
 
 window.addEventListener('keydown', (e) => {
   // Space startles, modifiers or not; the letters leave the browser's shortcuts (cmd-R, ctrl-W) alone
@@ -877,7 +878,10 @@ renderer.setAnimationLoop((now) => {
   updateSway(dt);
   bird.update(dt);
   bird.root.visible = activeBird === 'hummingbird';
-  for (const b of Object.values(small)) b.update(dt);
+  for (const b of Object.values(small)) {
+    if (b.active) b.feathered.setAttention(recent ? pointerTarget : camera.position);
+    b.update(dt);
+  }
   if (cur()) cur()!.headPosition(headPos);
   else bird.headPosition(headPos);
   updateFocus(dt);

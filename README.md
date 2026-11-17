@@ -9,8 +9,8 @@ https://allowistic.github.io/hummingbird-scene/
 ## What's in it
 
 - **Hummingbird** (purple-throated mountain-gem): Theo Tillberg's rigged, feathered hummingbird. It now flies a tour round the scene every so often: it darts to three to five points round the twig, hovers at each with its wings a blur, then comes back and lands.
-- **American robin** (the songbird): steady flaps with short glides, hops along the twig, looks about, flicks its tail and sings.
-- **American goldfinch** (the finch): the finch's bounding flight, a burst of flaps then wings shut, rising and dipping. Hops, sings and flicks its tail too.
+- **American robin** (the songbird): drawn with the hummingbird's own feather system, so it has the same layered contour feathers, soft fuzz, separate primaries and secondaries that fan and fold, tail feathers, glossy eyes and lighting. Grey-brown back, orange-red breast, near-black head, white eye ring and streaked white throat, yellow bill. Steady flaps with short glides, hops along the twig, looks about, flicks its tail and sings.
+- **American goldfinch** (the finch): same feather system. Bright yellow body, black cap, black wings with two white wing bars and a yellow shoulder, short pale bill. The finch's bounding flight, a burst of flaps then wings shut, rising and dipping. Hops, sings and flicks its tail too.
 - **Bird picker** (bottom right, next to the menu): Hummingbird, Robin, Goldfinch. It swaps the bird on screen and its voice together.
 - **Sound**: the music note in the bird menu (or the S key) turns synthesized bird sound on and off. Made with Web Audio in the page, no audio files.
 - The settings card still has animation speed, time of day, slow camera drift and performance mode, and pause works for every bird. F makes the current bird fly.
@@ -19,7 +19,7 @@ https://allowistic.github.io/hummingbird-scene/
 
 - Original hummingbird scene, rig, feathers, perch and environment: **Theo Tillberg**, Codevember 2026, day 12, MIT License. https://github.com/ttillberg/codevember-2026/tree/main/12
 - Found via the version ezshine posted on X.
-- Robin and goldfinch: modeled procedurally in code for this build (`source/src/extra/smallBirds.ts`). No third-party models, textures or sounds are used for them.
+- Robin and goldfinch: species settings for Theo Tillberg's feather system, written for this build (`source/src/extra/songbirdSpecies.ts`), posed by a flight and behaviour rig written for this build (`source/src/extra/smallBirds.ts`). No third-party models, textures or sounds are used for them.
 - Bird sound: synthesized in the page (`source/src/extra/sound.js`).
 - three.js, MIT License, three.js authors.
 

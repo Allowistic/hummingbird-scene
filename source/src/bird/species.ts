@@ -98,6 +98,8 @@ export interface WingDef {
   rest: { from: [number, number]; to: [number, number]; width: [number, number, number]; height: number; cross: [number, number] };
   color: number;
   sheen: number;
+  /** optional look per resting covert row (shoulder → greater): wing bars, a coloured shoulder */
+  covertRows?: string[];
 }
 
 export interface TailDef {
