@@ -8,6 +8,8 @@ https://allowistic.github.io/hummingbird-scene/
 
 ![The Monarch pick: the butterfly large, perched on the tag and in flight](screenshots_monarch.png)
 
+![The painted (Risky) monarch: perched, closing its wings, in flight, and side by side with the Real style](screenshots_risky_monarch.png)
+
 ## What's in it
 
 - **Hummingbird** (purple-throated mountain-gem): Theo Tillberg's rigged, feathered hummingbird. It now flies a tour round the scene every so often: it darts to three to five points round the tag, hovers at each with its wings a blur, then comes back and lands.
