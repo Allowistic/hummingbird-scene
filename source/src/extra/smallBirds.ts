@@ -25,6 +25,8 @@ export interface SmallEnv {
   home: number;
   sway: { at(x: number, out: THREE.Vector3): THREE.Vector3; load(x: number | null): void; push(x: number, s: number, side?: number): void };
   camera: THREE.Camera;
+  /** move a waypoint out of the scenery's way */
+  guard?: (p: THREE.Vector3) => void;
 }
 
 const clamp = THREE.MathUtils.clamp;
@@ -721,7 +723,9 @@ export class SmallBird {
     this.route = [];
     let side = Math.random() < 0.5 ? -1 : 1;
     for (let i = 0; i < n; i++) {
-      this.route.push(new THREE.Vector3(side * rand(0.75, 1.35), rand(0.3, 0.8), rand(-0.7, 0.45)));
+      const w = new THREE.Vector3(side * rand(0.75, 1.35), rand(0.3, 0.8), rand(-0.7, 0.45));
+      this.env.guard?.(w);
+      this.route.push(w);
       side = -side;
     }
     this.leg = 0;

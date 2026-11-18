@@ -23,6 +23,9 @@ export type FleePhase = 'idle' | 'ready' | 'takeoff' | 'away' | 'dart' | 'hover'
 
 const BLUR = 2; // pose.wing.spread value that hides the blades (the blur fan stands in)
 
+/** the scene can move a hover point out of its way (the RISK tag perch: in front of it) */
+export const tourGuard = { fix: (_p: THREE.Vector3) => {} };
+
 export class FleeLayer implements Layer {
   readonly name = 'flee';
   /** seconds it stays away */
@@ -319,6 +322,7 @@ export class FleeLayer implements Layer {
         if (Math.sign(p.x - home.x) === side && p.distanceTo(home) > 0.45 && (i === 0 || p.distanceTo(this.tour[i - 1]) > 0.6)) break;
       }
       p.y += home.y;
+      tourGuard.fix(p);
       this.tour.push(p);
       side = -side;
     }

@@ -1,7 +1,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createBackdrop } from './env/backdrop';
-import { createBranch, GRIP_X, loadBranch, PERCH_RANGE, perchFrames } from './env/branch';
+import { GRIP_X, perchFrames } from './env/branch';
+import { createRiskTag, TAG_PERCH_RANGE, TAG_RAIL_R, TAG_HALF, tagCovers } from './env/riskTag';
+import { createMonarch } from './extra/monarch';
+import { tourGuard } from './bird/motion/flee';
 import { createSway } from './env/sway';
 import { createBird, type GazeLayer, type HopLayer } from './bird';
 import type { Food } from './bird/types';
@@ -16,8 +19,6 @@ import { damp } from './bird/util';
 import { phone } from './device';
 import { SmallBird, type SmallKind, type PerchFrame } from './extra/smallBirds';
 import { initSound } from './extra/sound.js';
-// Vincent build: the Blender perch is inlined as a data URL so the page is one offline file
-import branchUrl from './assets/branch.glb?url';
 
 const canvas = document.querySelector<HTMLCanvasElement>('#c')!;
 const query = new URLSearchParams(location.search);
@@ -32,15 +33,16 @@ renderer.shadowMap.type = THREE.PCFShadowMap;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(30, 1, 0.02, 120);
-camera.position.set(1.55, 0.85, 3.0); // a little right of front, at the bird's height: the buds big in the foreground
+// a little right of front, back far enough that the RISK tag the bird sits on reads under it
+camera.position.set(1.88, 0.52, 3.8);
 
 const controls = new OrbitControls(camera, canvas);
-controls.target.set(GRIP_X - 0.04, 0.5, 0);
+controls.target.set(GRIP_X - 0.06, 0.08, 0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.06;
 // a camera on a tripod in front of the perch: some room to move, never round the back or underneath
 controls.minDistance = 1.4;
-controls.maxDistance = 4.4;
+controls.maxDistance = 6.5;
 controls.minPolarAngle = 1.2;
 controls.maxPolarAngle = 1.78;
 controls.minAzimuthAngle = -0.45;
@@ -68,11 +70,12 @@ const backdrop = createBackdrop();
 scene.add(backdrop.mesh);
 
 // procedural twig first, swapped for the Blender one once it's in
-const branch = createBranch();
+// the perch is Risk Rock's RISK tag, a solid sculpture (env/riskTag.ts): it doesn't bend under a bird
+const branch = createRiskTag();
 scene.add(branch.group);
-// the twig gives under the bird: it bends in the vertex shader, the bird rides along
+// (the twig used to give under the bird; the RISK tag is solid, so it doesn't)
 const sway = createSway();
-sway.use(branch.group);
+sway.give = 0;
 // loading: the bird and the procedural twig drawn in ink on millimetre paper
 // while the Blender twig comes down; then the picture fades in over it
 const loadLabel = document.querySelector<HTMLElement>('.loading-label span');
@@ -143,24 +146,7 @@ function texturesIn(roots: THREE.Object3D[]) {
   }
   return out;
 }
-const branchLoad = query.has('procbranch')
-  ? Promise.resolve()
-  : loadBranch(branchUrl, (e) => {
-      // (a gzipped response counts its unpacked bytes against the packed length: never past 100)
-      if (loadLabel && e.lengthComputable) loadLabel.textContent = `${Math.min(100, Math.round((e.loaded / e.total) * 100))}%`;
-    })
-      .then((b) => {
-        scene.remove(branch.group);
-        disposeTree(branch.group);
-        scene.add(b.group);
-        sway.use(b.group);
-        usePerch(b.group);
-        branchFuzz = b.fuzz;
-        applyFuzz();
-      })
-      .catch(() => {
-        /* no glb: keep the procedural twig */
-      });
+const branchLoad = Promise.resolve();
 
 const hemi = new THREE.HemisphereLight(0xeef2e6, 0x3a3826, 0.6);
 scene.add(hemi);
@@ -419,12 +405,22 @@ const headPos = new THREE.Vector3();
   g.uVignette.value = 0.22;
 }
 
+// flight paths stay clear of the tag: a waypoint over its outline is moved out in front of it
+// (everything is seen from the front, so the birds fly between the tag and the camera)
+function keepClearOfTag(p: THREE.Vector3) {
+  // (a leg from a point behind it to one in front could cross the letters: none go behind)
+  const clear = TAG_HALF + 0.25;
+  if (p.z < clear) p.z = clear + (p.z + 0.7) * 0.25;
+}
+tourGuard.fix = keepClearOfTag;
+
 // --- the perch, for hopping along it (the rays are in env/branch.ts) -----------
-const SMALL_RANGE: [number, number] = [PERCH_RANGE[0] - 0.1, PERCH_RANGE[1] + 0.15];
+const PERCH_RANGE = TAG_PERCH_RANGE;
+const SMALL_RANGE: [number, number] = [TAG_PERCH_RANGE[0], TAG_PERCH_RANGE[1]];
 let smallPerch: (x: number, out: PerchFrame) => PerchFrame | null = () => null;
 function usePerch(root: THREE.Object3D) {
-  bird.setPerch(perchFrames(root), PERCH_RANGE);
-  smallPerch = perchFrames(root, SMALL_RANGE) as typeof smallPerch;
+  bird.setPerch(perchFrames(root, PERCH_RANGE, () => TAG_RAIL_R), PERCH_RANGE);
+  smallPerch = perchFrames(root, SMALL_RANGE, () => TAG_RAIL_R) as typeof smallPerch;
 }
 function disposeTree(root: THREE.Object3D) {
   root.traverse((o) => {
@@ -436,6 +432,22 @@ function disposeTree(root: THREE.Object3D) {
 }
 usePerch(branch.group);
 
+// --- the monarch: an ambient extra beside whichever bird is showing (extra/monarch.ts) --
+const birdAtTmp = new THREE.Vector3();
+const monarch = createMonarch({
+  perch: branch.group.getObjectByName('perch') as THREE.Mesh,
+  covers: tagCovers,
+  half: TAG_HALF,
+  bird: () => (cur() ? cur()!.root : bird.root).getWorldPosition(birdAtTmp),
+  camera,
+});
+scene.add(monarch.group);
+let monarchOn = !query.has('nomonarch');
+function setMonarch(on: boolean) {
+  monarchOn = on;
+  monarch.setVisible(on);
+}
+
 // --- the other birds: a robin and a goldfinch, one bird on screen at a time ------
 const smallEnv = {
   perch: (x: number, out: PerchFrame) => smallPerch(x, out),
@@ -443,6 +455,7 @@ const smallEnv = {
   home: GRIP_X,
   sway,
   camera,
+  guard: (p: THREE.Vector3) => keepClearOfTag(p),
 };
 const small: Record<SmallKind, SmallBird> = { robin: new SmallBird('robin', smallEnv), goldfinch: new SmallBird('goldfinch', smallEnv) };
 for (const b of Object.values(small)) scene.add(b.rider);
@@ -624,6 +637,7 @@ function applyFuzz() {
   bird.feathers.fuzz.visible = fuzzVisible && birdFuzz && !perfMode;
   for (const b of Object.values(small)) b.feathered.feathers.fuzz.visible = fuzzVisible && birdFuzz && !perfMode;
   if (branchFuzz) branchFuzz.visible = fuzzVisible && !perfMode;
+  if (typeof monarch !== 'undefined') monarch.setPerf(perfMode || !fuzzVisible);
 }
 const flash0 = bird.plumage.uFlash.value;
 const glint0 = bird.plumage.uGlint.value;
@@ -691,6 +705,7 @@ const settings = createSettings([
   { kind: 'range', key: 'v_sun', label: 'Time of day (dawn . noon . golden)', value: 0.5, min: 0, max: 1, step: 0.01, set: (v) => setSun(v) },
   { kind: 'toggle', key: 'v_drift', label: 'Slow camera drift', value: false, set: (v) => (drift = v) },
   { kind: 'toggle', key: 'v_perf', label: 'Performance mode (laptop)', value: phone, set: (v) => setPerf(v) },
+  { kind: 'toggle', key: 'v_monarch', label: 'Monarch butterfly', value: monarchOn, set: (v) => setMonarch(v) },
   { kind: 'heading', label: 'Camera' },
   { kind: 'range', key: 'shake', label: 'Handheld', value: 2.05, min: 0, max: 3.5, step: 0.05, set: (v) => (shakeAmt = v) },
   { kind: 'range', key: 'dof', label: 'Depth of field', value: 85, min: 0, max: 260, step: 5, set: (v) => (post.dof.uAperture.value = v) },
@@ -705,7 +720,6 @@ const settings = createSettings([
   { kind: 'range', key: 'mood', label: 'Calm · alert', value: 0.32, min: 0, max: 1, step: 0.01, set: (v) => (bird.mind.baseline = v) },
   { kind: 'range', key: 'flash', label: 'Gorget flash', value: 1, min: 0, max: 2, step: 0.05, set: (v) => { bird.plumage.uFlash.value = flash0 * v; bird.plumage.uGlint.value = glint0 * v; } },
   { kind: 'toggle', key: 'fuzz', label: 'Down and felt', value: true, set: (v) => { fuzzVisible = v; applyFuzz(); } },
-  { kind: 'range', key: 'give', label: 'Twig give', value: 1, min: 0, max: 3, step: 0.05, set: (v) => (sway.give = v) },
   { kind: 'heading', label: 'Workbench' },
   { kind: 'action', label: 'Demo', key: 'D', run: () => setDemo(demoT < 0) },
   { kind: 'action', label: 'Pause', key: 'P', run: () => setPaused(!paused) },
@@ -729,6 +743,7 @@ actions.root.addEventListener('pointerdown', () => settings.open(false), true);
 // --- keys ---------------------------------------------------------------------
 const KEYS: Record<string, () => void> = {
   KeyF: () => activeFlee(),
+  KeyM: () => setMonarch(!monarchOn),
   // a ruffle now (the one-a-minute limit is only for the ones it does by itself)
   KeyR: () => bird.ruffle('shake'),
   KeyB: turnAround,
@@ -763,7 +778,25 @@ const sound = initSound({
   get speed() { return speed; },
 });
 (window as unknown as { __cam: unknown }).__cam = camera;
-(window as unknown as { __birds: unknown }).__birds = { small, bird, camera, controls, setPerf, get active() { return activeBird; }, setBird, sound, flee: activeFlee, pause: (on: boolean) => setPaused(on) };
+// for the tests: each foot of the bird on screen, and how far it is above the tag's top there
+const feetRay = new THREE.Raycaster();
+feetRay.ray.direction.set(0, -1, 0);
+function feetCheck() {
+  const out: { name: string; x: number; y: number; z: number; gap: number | null; inside: boolean }[] = [];
+  const root = cur() ? (cur()!.feathered?.root ?? cur()!.root) : bird.root;
+  const perch = branch.group.getObjectByName('perch') as THREE.Mesh;
+  const v = new THREE.Vector3();
+  root.updateWorldMatrix(true, true);
+  root.traverse((o) => {
+    if (!/^(foot|toe)\.[LR](\.\d)?$/.test(o.name)) return;
+    o.getWorldPosition(v);
+    feetRay.ray.origin.set(v.x, v.y + 1, v.z);
+    const h = feetRay.intersectObject(perch, false)[0];
+    out.push({ name: o.name, x: +v.x.toFixed(3), y: +v.y.toFixed(3), z: +v.z.toFixed(3), gap: h ? +(v.y - h.point.y).toFixed(3) : null, inside: tagCovers(v.x, v.y) });
+  });
+  return out;
+}
+(window as unknown as { __birds: unknown }).__birds = { feetCheck, tagCovers, TAG_HALF, setSpeed: (v: number) => (speed = v), small, bird, monarch, setMonarch, camera, controls, setPerf, get active() { return activeBird; }, setBird, sound, flee: activeFlee, pause: (on: boolean) => setPaused(on) };
 
 window.addEventListener('keydown', (e) => {
   // Space startles, modifiers or not; the letters leave the browser's shortcuts (cmd-R, ctrl-W) alone
@@ -889,6 +922,7 @@ renderer.setAnimationLoop((now) => {
   seeds.update(dt, t, billTip, headPos);
   insects.update(dt, t, billTip);
   ambient.update(dt);
+  monarch.update(dt);
   updateDemo(dt);
   frame();
 });

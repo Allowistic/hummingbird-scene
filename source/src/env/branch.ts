@@ -30,7 +30,7 @@ export const PERCH_RANGE: [number, number] = [GRIP_X - 0.45, GRIP_X + 0.45];
  * come from two neighbours. The twig never moves, so each x is cast once: the hop's
  * search asks the same handful of spots over and over.
  */
-export function perchFrames(root: THREE.Object3D, range = PERCH_RANGE) {
+export function perchFrames(root: THREE.Object3D, range = PERCH_RANGE, radiusAt: (x: number) => number = perchRadiusAt) {
   root.updateMatrixWorld(true);
   const src = root.getObjectByName('perch') as THREE.Mesh | undefined;
   // (only ever cast at, never drawn: nothing on the GPU to free when the twig is swapped)
@@ -66,7 +66,7 @@ export function perchFrames(root: THREE.Object3D, range = PERCH_RANGE) {
     const key = Math.round(x * 1000);
     let f = cache.get(key);
     if (f === undefined) {
-      f = { point: new THREE.Vector3(), up: new THREE.Vector3(), tangent: new THREE.Vector3(), radius: perchRadiusAt(x) };
+      f = { point: new THREE.Vector3(), up: new THREE.Vector3(), tangent: new THREE.Vector3(), radius: radiusAt(x) };
       if (top(x, f.point) && top(x - 0.03, pa) && top(x + 0.03, pb)) {
         f.tangent.copy(pb).sub(pa).normalize();
         f.up.set(0, 1, 0).addScaledVector(f.tangent, -f.tangent.y).normalize();
