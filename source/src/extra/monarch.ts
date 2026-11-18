@@ -248,6 +248,258 @@ function paintWing(w: WingArt, under: boolean) {
   return { tex, b };
 }
 
+// --- Risk Rock's painted monarch ------------------------------------------------------
+// Risky (Kelly Graval) paints monarchs as stencil-and-spray pieces: crisp bold black outlines and
+// thick veins, the black border and wingtips filled with soft white spray dots in two or three rows
+// (a few tinted pale pink or pale blue), the orange cells sprayed as fades, deep red-orange at the
+// outer edge of each cell through warm yellow to a creamy glow near the body, with a fine speckled
+// overspray grain and a little pearl sheen. Colours sampled from photos of his painted butterflies
+// that Vincent shared. The style is based on Risk Rock's artwork, used with permission through
+// Vincent Strader, and is NOT covered by the MIT License.
+const RISKY = {
+  cream: '#fff2cc', glow: '#ffd98a', yellow: '#ffc23a', amber: '#ff9422', coral: '#fb6224', redor: '#ef4228', red: '#e0303e',
+  black: '#0b0707', white: '#f8f5ec', pink: '#f6cdd3', blue: '#c6e4f2',
+};
+function paintWingRisky(w: WingArt, under: boolean) {
+  const b = bounds(w.outline);
+  const W = b.x1 - b.x0, H = b.z1 - b.z0;
+  const NX = 1024, NY = Math.round((1024 * H) / W);
+  const c = document.createElement('canvas');
+  c.width = NX;
+  c.height = NY;
+  const g = c.getContext('2d')!;
+  const sx = NX / W;
+  const X = (x: number) => (x - b.x0) * sx;
+  const Y = (z: number) => (b.z1 - z) * sx;
+  const path = (pts: P2[], close = true) => {
+    g.beginPath();
+    pts.forEach(([x, z], i) => (i ? g.lineTo(X(x), Y(z)) : g.moveTo(X(x), Y(z))));
+    if (close) g.closePath();
+  };
+  let seed = w.fore ? (under ? 41 : 43) : under ? 47 : 53;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  const gauss = () => (rnd() + rnd() + rnd() - 1.5) / 1.5;
+  const k = RISKY;
+  path(w.outline);
+  g.save();
+  g.clip();
+  // the spray fade: cream at the body, through yellow and amber to coral and red-orange at the margin
+  const R = (w.fore ? 0.98 : 0.72) * sx;
+  const ox = X(0.0), oy = Y(w.fore ? 0.0 : -0.06);
+  const fade = g.createRadialGradient(ox, oy, 0, ox, oy, R);
+  if (under) {
+    fade.addColorStop(0, k.cream); fade.addColorStop(0.3, k.glow); fade.addColorStop(0.55, k.yellow);
+    fade.addColorStop(0.8, k.amber); fade.addColorStop(1, k.coral);
+  } else {
+    fade.addColorStop(0, k.cream); fade.addColorStop(0.2, k.glow); fade.addColorStop(0.46, k.yellow);
+    fade.addColorStop(0.66, k.amber); fade.addColorStop(0.8, k.coral); fade.addColorStop(0.92, k.redor); fade.addColorStop(1, k.red);
+  }
+  g.fillStyle = fade;
+  g.fillRect(0, 0, NX, NY);
+  const vein = (p: [P2, P2, P2], width: number) => {
+    g.beginPath();
+    g.moveTo(X(p[0][0]), Y(p[0][1]));
+    g.quadraticCurveTo(X(p[1][0]), Y(p[1][1]), X(p[2][0]), Y(p[2][1]));
+    g.lineWidth = width;
+    g.stroke();
+  };
+  g.lineCap = 'round';
+  g.lineJoin = 'round';
+  const vw = (w.fore ? 0.017 : 0.023) * sx;
+  const m = w.outline.slice(w.margin[0], w.margin[1] + 1);
+  const borderW = (w.fore ? 0.155 : 0.165) * sx;
+  // each cell sprayed darker toward its edges: soft red-orange halos along the veins and the border,
+  // built up in passes the way an airbrush builds a fade
+  const halo = under ? 'rgba(232,110,50,0.07)' : 'rgba(222,70,40,0.06)';
+  g.strokeStyle = halo;
+  for (let i = 0; i < 7; i++) {
+    const f = 7.5 - i * 0.85;
+    for (const v of w.veins) vein(v, vw * f);
+    path(w.cell);
+    g.lineWidth = vw * f;
+    g.stroke();
+    path(m, false);
+    g.lineWidth = borderW + vw * f * 1.4;
+    g.stroke();
+  }
+  // the airbrushed highlight: a creamy white glow near the body, and a lighter core in each cell
+  const glow = g.createRadialGradient(ox, oy, 0, ox, oy, R * 0.34);
+  glow.addColorStop(0, 'rgba(255,250,232,0.92)');
+  glow.addColorStop(0.5, 'rgba(255,238,196,0.4)');
+  glow.addColorStop(1, 'rgba(255,240,205,0)');
+  g.fillStyle = glow;
+  g.fillRect(0, 0, NX, NY);
+  for (const v of w.veins) {
+    // a soft warm-yellow bloom between this vein and the next, a third of the way out
+    const [a, , e] = v;
+    const px = a[0] + (e[0] - a[0]) * 0.45, pz = a[1] + (e[1] - a[1]) * 0.45;
+    const gl = g.createRadialGradient(X(px), Y(pz), 0, X(px), Y(pz), 0.11 * sx);
+    gl.addColorStop(0, under ? 'rgba(255,236,190,0.4)' : 'rgba(255,218,110,0.5)');
+    gl.addColorStop(1, 'rgba(255,214,130,0)');
+    g.fillStyle = gl;
+    g.fillRect(0, 0, NX, NY);
+  }
+  // the spray grain over the colour: fine flecks, lighter and darker
+  for (let i = 0; i < 26000; i++) {
+    const v = rnd();
+    g.fillStyle = v < 0.5 ? `rgba(170,30,20,${0.05 + rnd() * 0.1})` : v < 0.9 ? `rgba(255,236,190,${0.04 + rnd() * 0.08})` : `rgba(20,10,10,${0.04 + rnd() * 0.08})`;
+    const r = 0.5 + rnd() * 1.1;
+    g.beginPath();
+    g.arc(rnd() * NX, rnd() * NY, r, 0, Math.PI * 2);
+    g.fill();
+  }
+  // overspray: black specks scattered off the stencil edges of the veins and the border
+  const speckAlong = (p0: P2, p1: P2, p2: P2, spread: number, n: number) => {
+    for (let i = 0; i < n; i++) {
+      const t = rnd(), u = 1 - t;
+      const x = u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0];
+      const z = u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1];
+      g.fillStyle = `rgba(12,6,6,${0.25 + rnd() * 0.45})`;
+      g.beginPath();
+      g.arc(X(x) + gauss() * spread, Y(z) + gauss() * spread, 0.5 + rnd() * 1.3, 0, Math.PI * 2);
+      g.fill();
+    }
+  };
+  for (const v of w.veins) speckAlong(v[0], v[1], v[2], vw * 2.6, 380);
+  for (let i = 0; i < m.length - 1; i++) {
+    const a = m[i], e = m[i + 1];
+    speckAlong(a, [(a[0] + e[0]) / 2, (a[1] + e[1]) / 2], e, borderW * 0.75, 260);
+  }
+  // the stencil: thick black veins, the cell, the leading edge, the border and the outline, all crisp
+  g.strokeStyle = k.black;
+  for (const v of w.veins) {
+    vein(v, vw);
+    const mid: [P2, P2, P2] = [
+      [(v[0][0] + v[1][0]) / 2, (v[0][1] + v[1][1]) / 2],
+      [(v[1][0] + v[2][0]) / 2, (v[1][1] + v[2][1]) / 2],
+      v[2],
+    ];
+    vein(mid, vw * 1.3);
+  }
+  path(w.cell);
+  g.lineWidth = vw * 1.1;
+  g.stroke();
+  g.lineWidth = (w.fore ? 0.06 : 0.08) * sx;
+  path(w.fore ? w.outline.slice(0, 8) : w.outline.slice(12).concat([w.outline[0]]), false);
+  g.stroke();
+  g.lineWidth = borderW;
+  path(m, false);
+  g.stroke();
+  g.lineWidth = 0.05 * sx; // the bold outline round the whole wing (half of it inside the clip)
+  path(w.outline);
+  g.stroke();
+  // a soft spray dot: a white core that fades out at its rim
+  const dot = (x: number, y: number, r: number, col: string) => {
+    const gr = g.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, col);
+    gr.addColorStop(0.62, col);
+    gr.addColorStop(1, 'rgba(255,255,255,0)');
+    g.fillStyle = gr;
+    g.beginPath();
+    g.arc(x, y, r, 0, Math.PI * 2);
+    g.fill();
+  };
+  const tint = () => {
+    const v = rnd();
+    return v < 0.18 ? k.pink : v < 0.27 ? k.blue : k.white;
+  };
+  if (w.fore) {
+    // the wingtip: black, with sprayed amber-to-yellow spots and white dots in it
+    g.fillStyle = k.black;
+    path([[0.6, 0.3], [0.7, 0.21], [0.78, 0.15], [0.86, 0.06], [0.96, 0.06], [1.05, 0.3]]);
+    g.fill();
+    for (const [x, z, r] of [[0.73, 0.235, 0.024], [0.785, 0.198, 0.026], [0.835, 0.158, 0.023], [0.878, 0.113, 0.018]] as [number, number, number][]) {
+      const gr = g.createRadialGradient(X(x), Y(z), 0, X(x), Y(z), r * sx * 1.25);
+      gr.addColorStop(0, under ? '#fbe6b4' : '#f9dc8e');
+      gr.addColorStop(0.55, under ? k.yellow : k.amber);
+      gr.addColorStop(0.85, under ? k.amber : k.coral);
+      gr.addColorStop(1, 'rgba(200,70,60,0)');
+      g.fillStyle = gr;
+      g.beginPath();
+      g.ellipse(X(x), Y(z), r * sx * 1.3, r * sx, -0.5, 0, Math.PI * 2);
+      g.fill();
+    }
+    for (const [x, z, r] of [[0.81, 0.248, 0.013], [0.862, 0.218, 0.013], [0.905, 0.178, 0.012], [0.66, 0.258, 0.013], [0.94, 0.13, 0.01], [0.93, 0.24, 0.009], [0.7, 0.275, 0.008]] as [number, number, number][])
+      dot(X(x), Y(z), r * sx * 1.25, tint());
+  }
+  // two or three rows of spray dots in the border, between the veins
+  const cx = w.fore ? 0.5 : 0.3, cz = w.fore ? 0.0 : -0.25;
+  const rows: [number, number, number][] = w.fore
+    ? [[0.024, 0.0095, 1], [0.056, 0.0135, 0], [0.09, 0.0085, 0]]
+    : [[0.026, 0.0105, 1], [0.064, 0.0145, 0], [0.1, 0.008, 0]];
+  for (const [inset, r, outer] of rows) {
+    for (let i = 0; i < m.length - 1; i++) {
+      const [ax, az] = m[i], [bx, bz] = m[i + 1];
+      const seg = Math.hypot(bx - ax, bz - az);
+      const n = Math.max(1, Math.round(seg / 0.042));
+      for (let q = 0; q < n; q++) {
+        const u = (q + 0.5) / n;
+        const px = ax + (bx - ax) * u, pz = az + (bz - az) * u;
+        let nx = -(bz - az) / seg, nz = (bx - ax) / seg;
+        if (nx * (cx - px) + nz * (cz - pz) < 0) { nx = -nx; nz = -nz; }
+        const off = outer ? [-0.012, 0.012] : [0];
+        for (const o of off) {
+          const qx = px + nx * inset + ((bx - ax) / seg) * o, qz = pz + nz * inset + ((bz - az) / seg) * o;
+          const rr = r * (0.85 + rnd() * 0.35) * sx * 1.3;
+          dot(X(qx) + gauss() * 1.5, Y(qz) + gauss() * 1.5, rr, tint());
+        }
+      }
+    }
+  }
+  // a fine dusting of white overspray over the whole wing, a touch heavier on the black
+  for (let i = 0; i < 1400; i++) {
+    g.fillStyle = `rgba(250,246,236,${0.05 + rnd() * 0.14})`;
+    g.beginPath();
+    g.arc(rnd() * NX, rnd() * NY, 0.5 + rnd() * 0.9, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.restore();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 8;
+  return { tex, b };
+}
+
+/** Risky's body: a black stencil shape with a small white highlight down its back */
+function bodyTextureRisky(kind: 'thorax' | 'head' | 'abdomen') {
+  const c = document.createElement('canvas');
+  c.width = 512;
+  c.height = 256;
+  const g = c.getContext('2d')!;
+  g.scale(2, 2);
+  g.fillStyle = RISKY.black;
+  g.fillRect(0, 0, 256, 128);
+  // the highlight: a soft white streak along the top (u ~ 0.72 is the upper side after the rotation)
+  const u = 184;
+  const v0 = kind === 'abdomen' ? 14 : 30, v1 = kind === 'abdomen' ? 70 : 92;
+  const gr = g.createLinearGradient(u - 10, 0, u + 10, 0);
+  gr.addColorStop(0, 'rgba(255,255,255,0)');
+  gr.addColorStop(0.5, 'rgba(250,248,240,0.9)');
+  gr.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = gr;
+  g.beginPath();
+  g.ellipse(u, (v0 + v1) / 2, kind === 'head' ? 6 : 8, (v1 - v0) / 2, 0, 0, Math.PI * 2);
+  g.fill();
+  // grain
+  let s = kind === 'head' ? 61 : kind === 'thorax' ? 67 : 71;
+  const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 900; i++) {
+    g.fillStyle = `rgba(240,236,228,${0.05 + rnd() * 0.12})`;
+    g.fillRect(rnd() * 256, rnd() * 128, 0.8, 0.8);
+  }
+  if (kind === 'thorax') {
+    g.fillStyle = '#f2efe8';
+    for (const [x, y, r] of [[150, 40, 2.4], [222, 44, 2.4], [160, 78, 1.8], [210, 80, 1.8]] as [number, number, number][]) {
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
 /** a wing's mesh: a grid over its bounds, cupped a little; the outline comes from the texture's alpha */
 function wingGeo(b: { x0: number; x1: number; z0: number; z1: number }, cup: number) {
   const NX = 14, NZ = 10;
@@ -345,7 +597,9 @@ const angleLerp = (a: number, b: number, t: number) => {
 
 type State = 'fly' | 'approach' | 'descend' | 'perched' | 'takeoff';
 
-export function createMonarch(env: MonarchEnv) {
+export type MonarchStyle = 'risky' | 'real';
+
+export function createMonarch(env: MonarchEnv, initialStyle: MonarchStyle = 'risky') {
   const root = new THREE.Group();
   root.name = 'monarch';
   root.rotation.order = 'YXZ';
@@ -373,12 +627,52 @@ export function createMonarch(env: MonarchEnv) {
   const wings: { pivot: THREE.Group; fore: boolean }[] = [];
   const sides: THREE.Group[] = [];
   const wingMats: THREE.Material[] = [];
+  // each wing's two meshes (top and underside), to swap the paint between the styles
+  const wingMeshes: { mesh: THREE.Mesh; fore: boolean; under: boolean }[] = [];
+  const riskyMat = (tex: THREE.Texture, side: THREE.Side) =>
+    new THREE.MeshPhysicalMaterial({
+      map: tex,
+      alphaTest: 0.5,
+      alphaToCoverage: true,
+      side,
+      // spray paint on a sealed panel: a soft satin, a little pearl sheen on top
+      roughness: 0.55,
+      metalness: 0,
+      clearcoat: 0.18,
+      clearcoatRoughness: 0.5,
+      iridescence: 0.22,
+      iridescenceIOR: 1.5,
+      sheen: 0.35,
+      sheenColor: new THREE.Color(1, 0.92, 0.85),
+      sheenRoughness: 0.4,
+      envMapIntensity: 0.8,
+      // a touch of self-light so the sprayed colour reads as bright as paint on a lit wall
+      emissive: new THREE.Color(1, 1, 1),
+      emissiveMap: tex,
+      emissiveIntensity: 0.14,
+    });
+  // materials per style, made the first time the style is shown: [fore top, fore under, hind top, hind under]
+  const styleMats: Partial<Record<MonarchStyle, THREE.Material[]>> = {};
+  const geos: Record<string, THREE.BufferGeometry> = {};
+  function matsFor(style: MonarchStyle) {
+    let mats = styleMats[style];
+    if (mats) return mats;
+    mats = [];
+    for (const art of [foreArt, hindArt]) {
+      const paint = style === 'risky' ? paintWingRisky : paintWing;
+      const make = style === 'risky' ? riskyMat : wingMat;
+      const top = paint(art, false);
+      const under = paint(art, true);
+      if (!geos[art.fore ? 'f' : 'h']) geos[art.fore ? 'f' : 'h'] = wingGeo(top.b, art.fore ? 0.035 : 0.03);
+      mats.push(make(top.tex, THREE.FrontSide), make(under.tex, THREE.BackSide));
+    }
+    styleMats[style] = mats;
+    return mats;
+  }
+  const mats0 = matsFor(initialStyle);
   for (const art of [foreArt, hindArt]) {
-    const top = paintWing(art, false);
-    const under = paintWing(art, true);
-    const geo = wingGeo(top.b, art.fore ? 0.035 : 0.03);
-    const mTop = wingMat(top.tex, THREE.FrontSide);
-    const mUnder = wingMat(under.tex, THREE.BackSide);
+    const geo = geos[art.fore ? 'f' : 'h'];
+    const mTop = mats0[art.fore ? 0 : 2], mUnder = mats0[art.fore ? 1 : 3];
     wingMats.push(mTop, mUnder);
     for (const s of [1, -1]) {
       const side = new THREE.Group();
@@ -387,10 +681,11 @@ export function createMonarch(env: MonarchEnv) {
       const pivot = new THREE.Group();
       pivot.position.x = 0.03 * L;
       pivot.rotation.order = 'ZYX';
-      for (const m of [mTop, mUnder]) {
+      for (const [m, under] of [[mTop, false], [mUnder, true]] as [THREE.Material, boolean][]) {
         const mesh = new THREE.Mesh(geo, m);
         mesh.castShadow = true;
         pivot.add(mesh);
+        wingMeshes.push({ mesh, fore: art.fore, under });
       }
       side.add(pivot);
       body.add(side);
@@ -407,13 +702,20 @@ export function createMonarch(env: MonarchEnv) {
   sphLo.rotateX(Math.PI / 2);
   const bodyMat = (kind: 'thorax' | 'head' | 'abdomen') =>
     new THREE.MeshPhysicalMaterial({ map: spotTexture(kind), roughness: 0.55, sheen: 0.6, sheenColor: new THREE.Color(0.5, 0.5, 0.55), sheenRoughness: 0.5 });
-  const thorax = new THREE.Mesh(sph, bodyMat('thorax'));
+  const riskyBodyMat = (kind: 'thorax' | 'head' | 'abdomen') =>
+    new THREE.MeshPhysicalMaterial({ map: bodyTextureRisky(kind), roughness: 0.42, clearcoat: 0.6, clearcoatRoughness: 0.3 });
+  const bodyMats: Partial<Record<MonarchStyle, Record<'thorax' | 'head' | 'abdomen', THREE.Material>>> = {};
+  const bodyMatsFor = (style: MonarchStyle) =>
+    (bodyMats[style] ??= style === 'risky'
+      ? { thorax: riskyBodyMat('thorax'), head: riskyBodyMat('head'), abdomen: riskyBodyMat('abdomen') }
+      : { thorax: bodyMat('thorax'), head: bodyMat('head'), abdomen: bodyMat('abdomen') });
+  const thorax = new THREE.Mesh(sph, bodyMatsFor(initialStyle).thorax);
   thorax.scale.set(0.05 * L, 0.048 * L, 0.075 * L);
-  const abdomen = new THREE.Mesh(sph, bodyMat('abdomen'));
+  const abdomen = new THREE.Mesh(sph, bodyMatsFor(initialStyle).abdomen);
   abdomen.scale.set(0.038 * L, 0.04 * L, 0.17 * L);
   abdomen.position.set(0, -0.012 * L, -0.215 * L);
   abdomen.rotation.x = 0.12;
-  const head = new THREE.Mesh(sph, bodyMat('head'));
+  const head = new THREE.Mesh(sph, bodyMatsFor(initialStyle).head);
   head.scale.set(0.038 * L, 0.036 * L, 0.034 * L);
   head.position.set(0, 0.004 * L, 0.095 * L);
   const eyeMat = new THREE.MeshPhysicalMaterial({ color: 0x1b1612, roughness: 0.25, clearcoat: 0.8, clearcoatRoughness: 0.15 });
@@ -440,6 +742,9 @@ export function createMonarch(env: MonarchEnv) {
     fuzz.add(t, a);
   }
   body.add(fuzz);
+  let style: MonarchStyle = initialStyle;
+  let perfOn = false;
+  fuzz.visible = style === 'real';
   // antennae, with clubbed tips
   const black = new THREE.MeshStandardMaterial({ color: 0x0e0c0b, roughness: 0.5 });
   const antennae: THREE.Group[] = [];
@@ -808,8 +1113,22 @@ export function createMonarch(env: MonarchEnv) {
       root.visible = on;
     },
     setPerf(on: boolean) {
-      fuzz.visible = !on;
+      perfOn = on;
+      // Risky's body is a flat stencil shape: no fuzz on it
+      fuzz.visible = !on && style === 'real';
     },
+    /** "Butterfly style": Risk Rock's painted monarch, or the realistic one */
+    setStyle(st: MonarchStyle) {
+      style = st;
+      const mats = matsFor(st);
+      for (const w of wingMeshes) w.mesh.material = mats[(w.fore ? 0 : 2) + (w.under ? 1 : 0)];
+      const bm = bodyMatsFor(st);
+      thorax.material = bm.thorax;
+      head.material = bm.head;
+      abdomen.material = bm.abdomen;
+      fuzz.visible = !perfOn && st === 'real';
+    },
+    get style() { return style; },
     /** for the screenshots: sit on a spot now (wings opening and closing), or fly */
     landNow(x?: number, open?: number) {
       if (x !== undefined) {

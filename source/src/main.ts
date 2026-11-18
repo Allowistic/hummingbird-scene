@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { createBackdrop } from './env/backdrop';
 import { GRIP_X, perchFrames } from './env/branch';
 import { createRiskTag, TAG_PERCH_RANGE, TAG_RAIL_R, TAG_HALF, tagCovers } from './env/riskTag';
-import { createMonarch } from './extra/monarch';
+import { createMonarch, type MonarchStyle } from './extra/monarch';
 import { tourGuard } from './bird/motion/flee';
 import { createSway } from './env/sway';
 import { createBird, type GazeLayer, type HopLayer } from './bird';
@@ -435,6 +435,18 @@ usePerch(branch.group);
 
 // --- the monarch: an ambient extra beside whichever bird is showing (extra/monarch.ts) --
 const birdAtTmp = new THREE.Vector3();
+// "Butterfly style": Risk Rock's painted monarch (the default) or the realistic one. Read the saved
+// choice up front so only that style's textures are painted at load; ?mstyle=real|risky wins
+const MSTYLE_LABEL: Record<MonarchStyle, string> = { risky: 'Risky (painted)', real: 'Real' };
+const labelToStyle = (v: string): MonarchStyle => (v === MSTYLE_LABEL.real ? 'real' : 'risky');
+const mstyleQuery = query.get('mstyle');
+let mstyle: MonarchStyle = mstyleQuery === 'real' || mstyleQuery === 'risky' ? mstyleQuery : 'risky';
+if (!mstyleQuery) {
+  try {
+    const saved = JSON.parse(localStorage.getItem('codevember-12-settings') ?? '{}').v_mstyle;
+    if (typeof saved === 'string') mstyle = labelToStyle(saved);
+  } catch { /* nothing saved */ }
+}
 const monarch = createMonarch({
   perch: branch.group.getObjectByName('perch') as THREE.Mesh,
   covers: tagCovers,
@@ -442,8 +454,12 @@ const monarch = createMonarch({
   bird: () => (activeBird === 'monarch' ? null : (cur() ? cur()!.root : bird.root).getWorldPosition(birdAtTmp)),
   camera,
   tag: branch.group,
-});
+}, mstyle);
 scene.add(monarch.group);
+function setMonarchStyle(st: MonarchStyle) {
+  mstyle = st;
+  monarch.setStyle(st);
+}
 let monarchOn = !query.has('nomonarch');
 function setMonarch(on: boolean) {
   monarchOn = on;
@@ -718,6 +734,7 @@ const settings = createSettings([
   { kind: 'toggle', key: 'v_drift', label: 'Slow camera drift', value: false, set: (v) => (drift = v) },
   { kind: 'toggle', key: 'v_perf', label: 'Performance mode (laptop)', value: phone, set: (v) => setPerf(v) },
   { kind: 'toggle', key: 'v_monarch', label: 'Monarch butterfly', value: monarchOn, set: (v) => setMonarch(v) },
+  { kind: 'select', key: 'v_mstyle', label: 'Butterfly style', value: MSTYLE_LABEL[mstyle], options: [MSTYLE_LABEL.risky, MSTYLE_LABEL.real], set: (v) => setMonarchStyle(labelToStyle(v)) },
   { kind: 'range', key: 'v_msize', label: 'Butterfly size (Monarch pick)', value: 2.5, min: 1, max: 4, step: 0.1, set: (v) => setHeroSize(v) },
   { kind: 'heading', label: 'Camera' },
   { kind: 'range', key: 'shake', label: 'Handheld', value: 2.05, min: 0, max: 3.5, step: 0.05, set: (v) => (shakeAmt = v) },
@@ -739,7 +756,7 @@ const settings = createSettings([
   { kind: 'action', label: 'Drawing', key: 'W', run: () => setDrawing(!drawing) },
   { kind: 'action', label: 'Head wire', key: 'H', run: () => setHeadWire(!headWire) },
   // URL flags win over what was saved: ?still is a camera on a tripod even if Handheld was turned up
-], query.has('still') ? { shake: 0 } : {});
+], { ...(query.has('still') ? { shake: 0 } : {}), ...(mstyleQuery === 'real' || mstyleQuery === 'risky' ? { v_mstyle: MSTYLE_LABEL[mstyle] } : {}) });
 
 // --- the action menu: one round button, bottom right (the settings beside it) ---
 const actions = createActionMenu([
@@ -811,7 +828,7 @@ function feetCheck() {
   });
   return out;
 }
-(window as unknown as { __birds: unknown }).__birds = { feetCheck, tagCovers, TAG_HALF, setSpeed: (v: number) => (speed = v), small, bird, monarch, setMonarch, camera, controls, setPerf, get active() { return activeBird; }, setBird, setHeroSize, get heroCam() { return heroCam; }, sound, flee: activeFlee, pause: (on: boolean) => setPaused(on) };
+(window as unknown as { __birds: unknown }).__birds = { feetCheck, tagCovers, TAG_HALF, setSpeed: (v: number) => (speed = v), small, bird, monarch, setMonarch, camera, controls, setPerf, get active() { return activeBird; }, setBird, setHeroSize, setMonarchStyle, get heroCam() { return heroCam; }, sound, flee: activeFlee, pause: (on: boolean) => setPaused(on) };
 
 window.addEventListener('keydown', (e) => {
   // Space startles, modifiers or not; the letters leave the browser's shortcuts (cmd-R, ctrl-W) alone
