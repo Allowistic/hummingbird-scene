@@ -6,6 +6,8 @@ https://allowistic.github.io/hummingbird-scene/
 
 ![The three birds on the RISK tag, and the monarch](screenshots.png)
 
+![The Monarch pick: the butterfly large, perched on the tag and in flight](screenshots_monarch.png)
+
 ## What's in it
 
 - **Hummingbird** (purple-throated mountain-gem): Theo Tillberg's rigged, feathered hummingbird. It now flies a tour round the scene every so often: it darts to three to five points round the tag, hovers at each with its wings a blur, then comes back and lands.
@@ -13,7 +15,8 @@ https://allowistic.github.io/hummingbird-scene/
 - **American goldfinch** (the finch): same feather system. Bright yellow body, black cap, black wings with two white wing bars and a yellow shoulder, short pale bill. The finch's bounding flight, a burst of flaps then wings shut, rising and dipping. Hops, sings and flicks its tail too.
 - **The perch: Risk Rock's RISK tag.** The twig is replaced by Risk Rock's RISK tag cut as a free-standing sculpture: the black outline-and-shadow piece is the body, thick with a fully rounded edge, and the letters sit raised on both faces, sprayed in the tag's yellow-to-red-to-purple fade with a cyan cut-through and a matte overspray grain. The top of the S is evened out into a smooth rail the birds stand on, with the same rail radius the twig had, so their feet wrap it. It's solid, so it no longer bends under the bird.
 - **Monarch butterfly**: an ambient extra beside whichever bird is showing, modeled and painted in code. Orange cells, black veins, the black border with two rows of white spots, the black forewing tip with its orange and white spots, the paler underside, a soft scale sheen, a spotted black body under a few shells of fuzz, clubbed antennae. It flies the way monarchs do (a few deep flaps, a glide on raised wings, a wandering path), keeps clear of the bird and the tag, and every so often lands on the top of a letter and slowly opens and closes its wings. Toggle it in the settings card ("Monarch butterfly") or with the M key. In performance mode its fuzz is off. About 6k triangles.
-- **Bird picker** (bottom right, next to the menu): Hummingbird, Robin, Goldfinch. It swaps the bird on screen and its voice together.
+- **Bird picker** (bottom right, next to the menu): Hummingbird, Robin, Goldfinch, Monarch. It swaps the bird on screen and its voice together.
+- **Monarch pick (no bird)**: no bird is shown and the monarch is the subject, about two and a half times life size, with the camera leaning in and following it. It wanders in front of the tag, lands on the tag's front face with its back to you, and basks, slowly opening and closing its wings. F sends it off the tag. Its sound is a quiet garden: a soft wing flutter while it flies over a low breeze, no song. "Butterfly size (Monarch pick)" in the settings scales it from 1x to 4x. Picking a bird again brings the small ambient monarch back, still toggled by M and the settings switch. Its wing textures are 1024 px with drawn scale strokes, its wings and body have more geometry and a fourth fuzz shell, and the wing edges are anti-aliased, so it holds up close: about 12k triangles.
 - **Sound**: the music note in the bird menu (or the S key) turns synthesized bird sound on and off. Made with Web Audio in the page, no audio files.
 - The settings card still has animation speed, time of day, slow camera drift and performance mode, and pause works for every bird. F makes the current bird fly.
 

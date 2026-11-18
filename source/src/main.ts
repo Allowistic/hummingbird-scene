@@ -198,7 +198,8 @@ const focusAt = new THREE.Vector3();
 const focusHold = new THREE.Vector3();
 let focusSet = false;
 function updateFocus(dt: number) {
-  if (bird.perched || !focusSet) focusHold.copy(headPos);
+  // the butterfly as the subject: the lens stays on it, perched or flying
+  if (bird.perched || !focusSet || activeBird === 'monarch') focusHold.copy(headPos);
   if (!focusSet) focusAt.copy(focusHold);
   focusSet = true;
   focusAt.lerp(focusHold, 1 - Math.exp(-dt * 8));
@@ -438,14 +439,22 @@ const monarch = createMonarch({
   perch: branch.group.getObjectByName('perch') as THREE.Mesh,
   covers: tagCovers,
   half: TAG_HALF,
-  bird: () => (cur() ? cur()!.root : bird.root).getWorldPosition(birdAtTmp),
+  bird: () => (activeBird === 'monarch' ? null : (cur() ? cur()!.root : bird.root).getWorldPosition(birdAtTmp)),
   camera,
+  tag: branch.group,
 });
 scene.add(monarch.group);
 let monarchOn = !query.has('nomonarch');
 function setMonarch(on: boolean) {
   monarchOn = on;
-  monarch.setVisible(on);
+  // picked as the subject, it stays whatever the switch says
+  monarch.setVisible(on || activeBird === 'monarch');
+}
+// how big it is when it's the subject (Monarch in the picker); the ambient one stays life size
+let heroSize = 2.5;
+function setHeroSize(v: number) {
+  heroSize = v;
+  if (activeBird === 'monarch') monarch.setSize(v);
 }
 
 // --- the other birds: a robin and a goldfinch, one bird on screen at a time ------
@@ -459,11 +468,12 @@ const smallEnv = {
 };
 const small: Record<SmallKind, SmallBird> = { robin: new SmallBird('robin', smallEnv), goldfinch: new SmallBird('goldfinch', smallEnv) };
 for (const b of Object.values(small)) scene.add(b.rider);
-type BirdId = 'hummingbird' | SmallKind;
+// 'monarch': no bird at all, the butterfly large as the subject
+type BirdId = 'hummingbird' | SmallKind | 'monarch';
 let activeBird: BirdId = 'hummingbird';
-const VOICE_TO_BIRD: Record<string, BirdId> = { hummingbird: 'hummingbird', songbird: 'robin', finch: 'goldfinch' };
-const BIRD_NAME: Record<BirdId, string> = { hummingbird: 'Hummingbird', robin: 'American robin', goldfinch: 'American goldfinch' };
-const cur = () => (activeBird === 'hummingbird' ? null : small[activeBird]);
+const VOICE_TO_BIRD: Record<string, BirdId> = { hummingbird: 'hummingbird', songbird: 'robin', finch: 'goldfinch', monarch: 'monarch' };
+const BIRD_NAME: Record<BirdId, string> = { hummingbird: 'Hummingbird', robin: 'American robin', goldfinch: 'American goldfinch', monarch: 'Monarch butterfly' };
+const cur = () => (activeBird === 'hummingbird' || activeBird === 'monarch' ? null : small[activeBird]);
 function setBird(voice: string) {
   const id = VOICE_TO_BIRD[voice] ?? 'hummingbird';
   if (id === activeBird) return;
@@ -472,15 +482,17 @@ function setBird(voice: string) {
   if (was) was.leave();
   const now = cur();
   if (now) now.enter();
-  else {
+  else if (id === 'hummingbird') {
     sway.load(bird.perched ? bird.root.position.x : null);
-  }
+  } else sway.load(null);
   bird.root.visible = id === 'hummingbird';
+  monarch.setHero(id === 'monarch', heroSize);
+  monarch.setVisible(monarchOn || id === 'monarch');
   const name = document.querySelector('.bird-name');
   if (name) name.textContent = BIRD_NAME[id];
 }
-const activeFlee = () => (cur() ? cur()!.flee() : bird.flee());
-const activeSing = (s: number) => (cur() ? cur()!.sing(s) : bird.sing(s));
+const activeFlee = () => (activeBird === 'monarch' ? monarch.takeOff() : cur() ? cur()!.flee() : bird.flee());
+const activeSing = (s: number) => (activeBird === 'monarch' ? undefined : cur() ? cur()!.sing(s) : bird.sing(s));
 
 // --- another bird: the feathers turn to new colours ----------------------------
 let paletteIndex = 0;
@@ -706,6 +718,7 @@ const settings = createSettings([
   { kind: 'toggle', key: 'v_drift', label: 'Slow camera drift', value: false, set: (v) => (drift = v) },
   { kind: 'toggle', key: 'v_perf', label: 'Performance mode (laptop)', value: phone, set: (v) => setPerf(v) },
   { kind: 'toggle', key: 'v_monarch', label: 'Monarch butterfly', value: monarchOn, set: (v) => setMonarch(v) },
+  { kind: 'range', key: 'v_msize', label: 'Butterfly size (Monarch pick)', value: 2.5, min: 1, max: 4, step: 0.1, set: (v) => setHeroSize(v) },
   { kind: 'heading', label: 'Camera' },
   { kind: 'range', key: 'shake', label: 'Handheld', value: 2.05, min: 0, max: 3.5, step: 0.05, set: (v) => (shakeAmt = v) },
   { kind: 'range', key: 'dof', label: 'Depth of field', value: 85, min: 0, max: 260, step: 5, set: (v) => (post.dof.uAperture.value = v) },
@@ -756,14 +769,16 @@ const KEYS: Record<string, () => void> = {
 };
 
 // --- sound and the bird picker (the picker swaps the bird and its voice together) --
+const isMonarch = () => activeBird === 'monarch';
 const birdAdapter = {
-  get root() { return cur()?.root ?? bird.root; },
+  get root() { return isMonarch() ? monarch.group : (cur()?.root ?? bird.root); },
   get mind() { return { t: cur() ? cur()!.time : bird.mind.t }; },
-  get fleeing() { return cur() ? cur()!.flapping : bird.fleeing; },
-  get perched() { return cur() ? false : bird.perched; },
+  get fleeing() { return isMonarch() ? monarch.flying : cur() ? cur()!.flapping : bird.fleeing; },
+  get perched() { return cur() || isMonarch() ? false : bird.perched; },
   sing: (sec: number) => activeSing(sec),
-  get singing() { return cur() ? cur()!.singing : bird.singing; },
-  get mouth() { return cur() ? cur()!.mouth : (globalThis as unknown as { __hbMouth: unknown }).__hbMouth; },
+  get singing() { return isMonarch() ? false : cur() ? cur()!.singing : bird.singing; },
+  // the butterfly has no song
+  get mouth() { return isMonarch() ? null : cur() ? cur()!.mouth : (globalThis as unknown as { __hbMouth: unknown }).__hbMouth; },
 };
 const sound = initSound({
   bird: birdAdapter,
@@ -796,7 +811,7 @@ function feetCheck() {
   });
   return out;
 }
-(window as unknown as { __birds: unknown }).__birds = { feetCheck, tagCovers, TAG_HALF, setSpeed: (v: number) => (speed = v), small, bird, monarch, setMonarch, camera, controls, setPerf, get active() { return activeBird; }, setBird, sound, flee: activeFlee, pause: (on: boolean) => setPaused(on) };
+(window as unknown as { __birds: unknown }).__birds = { feetCheck, tagCovers, TAG_HALF, setSpeed: (v: number) => (speed = v), small, bird, monarch, setMonarch, camera, controls, setPerf, get active() { return activeBird; }, setBird, setHeroSize, get heroCam() { return heroCam; }, sound, flee: activeFlee, pause: (on: boolean) => setPaused(on) };
 
 window.addEventListener('keydown', (e) => {
   // Space startles, modifiers or not; the letters leave the browser's shortcuts (cmd-R, ctrl-W) alone
@@ -916,6 +931,7 @@ renderer.setAnimationLoop((now) => {
     b.update(dt);
   }
   if (cur()) cur()!.headPosition(headPos);
+  else if (activeBird === 'monarch') monarch.headPosition(headPos);
   else bird.headPosition(headPos);
   updateFocus(dt);
   updateHeadCut();
@@ -923,6 +939,7 @@ renderer.setAnimationLoop((now) => {
   insects.update(dt, t, billTip);
   ambient.update(dt);
   monarch.update(dt);
+  updateHeroCam(dt);
   updateDemo(dt);
   frame();
 });
@@ -993,6 +1010,36 @@ gyroButton?.addEventListener('click', async () => {
   gyroButton.classList.toggle('on', tiltOn);
   gyroButton.setAttribute('aria-pressed', String(tiltOn));
 });
+
+// the Monarch pick: the camera leans in and follows the butterfly round the tag, gently
+// (target and camera move together, so the orbit, and any zoom, stay as they were)
+const HOME_TARGET = new THREE.Vector3(GRIP_X - 0.06, 0.08, 0);
+const heroGoal = new THREE.Vector3();
+const heroAt = new THREE.Vector3();
+const heroD = new THREE.Vector3();
+let heroCam = 0;
+function updateHeroCam(dt: number) {
+  const want = activeBird === 'monarch' ? 1 : 0;
+  if (want === 0 && heroCam < 1e-4 && controls.target.distanceToSquared(HOME_TARGET) < 1e-8) return;
+  const was = heroCam;
+  heroCam += (want - heroCam) * (1 - Math.exp(-dt * 1.6));
+  if (Math.abs(want - heroCam) < 1e-4) heroCam = want;
+  // closer in: about four fifths of the way, eased in and out with the pick
+  const k0 = 1 - 0.2 * was, k1 = 1 - 0.2 * heroCam;
+  heroD.copy(camera.position).sub(controls.target).multiplyScalar(k1 / k0);
+  camera.position.copy(controls.target).add(heroD);
+  heroGoal.copy(HOME_TARGET);
+  if (want) {
+    monarch.group.getWorldPosition(heroAt);
+    heroAt.x = THREE.MathUtils.clamp(heroAt.x, -1.0, 1.3);
+    heroAt.y = THREE.MathUtils.clamp(heroAt.y, -0.5, 0.9);
+    heroAt.z = THREE.MathUtils.clamp(heroAt.z, 0, 1.2);
+    heroGoal.lerp(heroAt, 0.6);
+  }
+  heroD.copy(heroGoal).sub(controls.target).multiplyScalar(1 - Math.exp(-dt * (want ? 1.2 : 1.6)));
+  controls.target.add(heroD);
+  camera.position.add(heroD);
+}
 
 const restPos = new THREE.Vector3();
 const orbit = new THREE.Vector3();

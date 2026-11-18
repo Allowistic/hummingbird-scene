@@ -19,6 +19,8 @@ export interface MonarchEnv {
   /** where the bird on screen is now (it keeps away from it), or null */
   bird: () => THREE.Vector3 | null;
   camera: THREE.Camera;
+  /** the whole tag (body and letters), to find spots on its front face: the Monarch pick rests there */
+  tag?: THREE.Object3D;
 }
 
 /** forewing length, world units: a monarch's is ~5 cm, its span ~10 cm, about a hummingbird's */
@@ -88,7 +90,7 @@ interface WingArt {
 function paintWing(w: WingArt, under: boolean) {
   const b = bounds(w.outline);
   const W = b.x1 - b.x0, H = b.z1 - b.z0;
-  const NX = 512, NY = Math.round((512 * H) / W);
+  const NX = 1024, NY = Math.round((1024 * H) / W);
   const c = document.createElement('canvas');
   c.width = NX;
   c.height = NY;
@@ -123,10 +125,24 @@ function paintWing(w: WingArt, under: boolean) {
   g.fillStyle = ground;
   g.fillRect(0, 0, NX, NY);
   // the scales: a fine grain of lighter and darker flecks
-  for (let i = 0; i < 2200; i++) {
+  for (let i = 0; i < 8800; i++) {
     const v = rnd();
     g.fillStyle = v < 0.5 ? `rgba(120,40,0,${0.05 + rnd() * 0.08})` : `rgba(255,190,90,${0.04 + rnd() * 0.08})`;
-    g.fillRect(rnd() * NX, rnd() * NY, 1.5, 1.5);
+    g.fillRect(rnd() * NX, rnd() * NY, 1.6, 1.6);
+  }
+  // and the rows of scales themselves, close up: short strokes laid outward from the wing's base
+  g.lineCap = 'round';
+  g.lineWidth = 1.3;
+  for (let i = 0; i < 7000; i++) {
+    const px = rnd() * NX, py = rnd() * NY;
+    const wx = b.x0 + px / sx, wz = b.z1 - py / sx;
+    const a = Math.atan2(-wz, wx) + (rnd() - 0.5) * 0.25;
+    const len = 2.2 + rnd() * 2.4;
+    g.strokeStyle = rnd() < 0.5 ? `rgba(90,30,0,${0.06 + rnd() * 0.06})` : `rgba(255,205,120,${0.05 + rnd() * 0.06})`;
+    g.beginPath();
+    g.moveTo(px, py);
+    g.lineTo(px + Math.cos(a) * len, py + Math.sin(a) * len);
+    g.stroke();
   }
   const black = '#100b08';
   // veins: black, thickening out toward the border, the underside's edged with pale scales
@@ -228,13 +244,13 @@ function paintWing(w: WingArt, under: boolean) {
   g.restore();
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = 4;
+  tex.anisotropy = 8;
   return { tex, b };
 }
 
 /** a wing's mesh: a grid over its bounds, cupped a little; the outline comes from the texture's alpha */
 function wingGeo(b: { x0: number; x1: number; z0: number; z1: number }, cup: number) {
-  const NX = 8, NZ = 6;
+  const NX = 14, NZ = 10;
   const pos: number[] = [], uv: number[] = [], idx: number[] = [];
   for (let j = 0; j <= NZ; j++) {
     for (let i = 0; i <= NX; i++) {
@@ -262,9 +278,10 @@ function wingGeo(b: { x0: number; x1: number; z0: number; z1: number }, cup: num
 
 function spotTexture(kind: 'thorax' | 'head' | 'abdomen') {
   const c = document.createElement('canvas');
-  c.width = 256;
-  c.height = 128;
+  c.width = 512;
+  c.height = 256;
   const g = c.getContext('2d')!;
+  g.scale(2, 2); // drawn on the 256 x 128 grid, at twice the resolution
   g.fillStyle = '#0d0b0b';
   g.fillRect(0, 0, 256, 128);
   g.fillStyle = '#f2efe8';
@@ -295,7 +312,7 @@ function spotTexture(kind: 'thorax' | 'head' | 'abdomen') {
   return t;
 }
 function fuzzTexture() {
-  const N = 128;
+  const N = 256;
   const c = document.createElement('canvas');
   c.width = c.height = N;
   const g = c.getContext('2d')!;
@@ -310,7 +327,7 @@ function fuzzTexture() {
   g.putImageData(img, 0, 0);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
-  t.repeat.set(3, 2);
+  t.repeat.set(5, 3);
   t.colorSpace = THREE.NoColorSpace;
   return t;
 }
@@ -343,6 +360,8 @@ export function createMonarch(env: MonarchEnv) {
     new THREE.MeshPhysicalMaterial({
       map: tex,
       alphaTest: 0.5,
+      // with the MSAA target, the cut-out edge is smoothed instead of stair-stepped up close
+      alphaToCoverage: true,
       side,
       roughness: 0.62,
       metalness: 0,
@@ -381,8 +400,11 @@ export function createMonarch(env: MonarchEnv) {
   }
 
   // --- body: thorax, abdomen, head, eyes, antennae, legs ----------------------------
-  const sph = new THREE.SphereGeometry(1, 18, 12);
+  const sph = new THREE.SphereGeometry(1, 28, 18);
   sph.rotateX(Math.PI / 2); // poles along z, so the texture's v runs head to tail
+  // the fuzz shells and the antenna clubs don't need as many
+  const sphLo = new THREE.SphereGeometry(1, 18, 12);
+  sphLo.rotateX(Math.PI / 2);
   const bodyMat = (kind: 'thorax' | 'head' | 'abdomen') =>
     new THREE.MeshPhysicalMaterial({ map: spotTexture(kind), roughness: 0.55, sheen: 0.6, sheenColor: new THREE.Color(0.5, 0.5, 0.55), sheenRoughness: 0.5 });
   const thorax = new THREE.Mesh(sph, bodyMat('thorax'));
@@ -406,12 +428,12 @@ export function createMonarch(env: MonarchEnv) {
   // the fuzz: a few shells, longer on the thorax (the birds' down, scaled to a butterfly)
   const fuzzTex = fuzzTexture();
   const fuzz = new THREE.Group();
-  for (const [k, cut] of [[1.12, 0.45], [1.24, 0.62], [1.36, 0.8]] as [number, number][]) {
+  for (const [k, cut] of [[1.08, 0.4], [1.17, 0.54], [1.27, 0.68], [1.38, 0.82]] as [number, number][]) {
     const mat = new THREE.MeshStandardMaterial({ color: 0x1a1817, alphaMap: fuzzTex, alphaTest: cut, roughness: 0.9 });
     // the alpha map's green channel decides; it is grey, so any works
-    const t = new THREE.Mesh(sph, mat);
+    const t = new THREE.Mesh(sphLo, mat);
     t.scale.copy(thorax.scale).multiplyScalar(k);
-    const a = new THREE.Mesh(sph, mat);
+    const a = new THREE.Mesh(sphLo, mat);
     a.scale.set(abdomen.scale.x * (1 + (k - 1) * 0.6), abdomen.scale.y * (1 + (k - 1) * 0.6), abdomen.scale.z * (1 + (k - 1) * 0.15));
     a.position.copy(abdomen.position);
     a.rotation.copy(abdomen.rotation);
@@ -425,8 +447,8 @@ export function createMonarch(env: MonarchEnv) {
     const pivot = new THREE.Group();
     pivot.position.set(s * 0.012 * L, 0.03 * L, 0.11 * L);
     const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(0, 0, 0), new THREE.Vector3(s * 0.05 * L, 0.09 * L, 0.18 * L), new THREE.Vector3(s * 0.11 * L, 0.11 * L, 0.36 * L));
-    const stalk = new THREE.Mesh(new THREE.TubeGeometry(curve, 10, 0.0042 * L, 5), black);
-    const club = new THREE.Mesh(sph, black);
+    const stalk = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.0042 * L, 8), black);
+    const club = new THREE.Mesh(sphLo, black);
     club.scale.set(0.011 * L, 0.011 * L, 0.03 * L);
     const tip = curve.getPoint(1), tan = curve.getTangent(1);
     club.position.copy(tip).addScaledVector(tan, -0.015 * L);
@@ -437,7 +459,7 @@ export function createMonarch(env: MonarchEnv) {
   }
   // legs: the two back pairs it stands on (a monarch carries its front pair folded)
   const legs: THREE.Group[] = [];
-  const legGeo = new THREE.CylinderGeometry(0.0035 * L, 0.0028 * L, 1, 4);
+  const legGeo = new THREE.CylinderGeometry(0.0035 * L, 0.0028 * L, 1, 6);
   legGeo.translate(0, -0.5, 0);
   for (const s of [1, -1]) {
     for (const [z, out] of [[0.02, 0.9], [-0.025, 0.75], [0.05, 0.4]] as [number, number][]) {
@@ -475,6 +497,27 @@ export function createMonarch(env: MonarchEnv) {
       }
     }
   }
+  // on the front of the tag (the Monarch pick): it rests on the face, head up, back to the camera,
+  // so its open wings show their whole pattern
+  const faceSpots: { p: THREE.Vector3; n: THREE.Vector3 }[] = [];
+  if (env.tag) {
+    const ray = new THREE.Raycaster();
+    ray.ray.direction.set(0, 0, -1);
+    env.tag.updateMatrixWorld(true);
+    const hits: THREE.Intersection[] = [];
+    for (let x = -1.1; x <= 1.25; x += 0.05) {
+      for (let y = -0.75; y <= 0.45; y += 0.05) {
+        ray.ray.origin.set(x, y, 2);
+        hits.length = 0;
+        ray.intersectObject(env.tag, true, hits);
+        const h = hits[0];
+        if (!h || !h.face) continue;
+        const n = h.face.normal.clone().transformDirection(h.object.matrixWorld);
+        if (n.z < 0.9) continue;
+        faceSpots.push({ p: h.point.clone(), n });
+      }
+    }
+  }
   // the spots must be on screen when chosen
   const ndc = new THREE.Vector3();
   function onScreen(p: THREE.Vector3, m = 0.8) {
@@ -507,19 +550,46 @@ export function createMonarch(env: MonarchEnv) {
   let baskGoal = 1;
   let baskNext = 1.5;
   let restLeft = 0;
+  // the Monarch pick: shown large, the subject itself, framed near the middle
+  let hero = false;
+  let size = 1;
+  let onFace = false; // resting on the front of the tag (or landing there, or leaving it)
+  let faceSpin = 0; // its heading on the face, round the face's normal
+  let wallW = 0; // 0: posed from yaw/pitch/bank, 1: posed flat on the face
+  // how far the body sits off what it stands on: on the face the legs reach straight in, so a little more
+  const standOff = () => (0.034 * L + (onFace ? 0.009 : 0)) * size;
+  const qE = new THREE.Quaternion();
+  const qWall = new THREE.Quaternion();
+  const bx = new THREE.Vector3(), by = new THREE.Vector3(), bz = new THREE.Vector3();
+  const mBasis = new THREE.Matrix4();
   const wob = Array.from({ length: 6 }, () => ({ f: rand(0.4, 1.6), a: rand(0, Math.PI * 2) }));
   const FLY_BOX = { x: [-1.5, 1.6], y: [0.1, 1.15], z: [0.25, 1.1] };
+  // large, it keeps near the middle of the picture, in front of the tag
+  const HERO_BOX = { x: [-0.75, 1.05], y: [-0.35, 0.75], z: [0.6, 1.4] };
   const pickGoal = () => {
-    for (let k = 0; k < 10; k++) {
-      goal.set(rand(FLY_BOX.x[0], FLY_BOX.x[1]), rand(FLY_BOX.y[0], FLY_BOX.y[1]), rand(FLY_BOX.z[0], FLY_BOX.z[1]));
-      if (goal.distanceTo(pos) > 0.6 && onScreen(goal, 0.85)) return;
+    const B = hero ? HERO_BOX : FLY_BOX;
+    for (let k = 0; k < 12; k++) {
+      goal.set(rand(B.x[0], B.x[1]), rand(B.y[0], B.y[1]), rand(B.z[0], B.z[1]));
+      if (goal.distanceTo(pos) > (hero ? 0.45 : 0.6) && onScreen(goal, hero ? 0.6 : 0.85)) return;
     }
   };
   pickGoal();
 
   function chooseSpot() {
+    onFace = false;
+    if (hero && faceSpots.length && Math.random() < 0.8) {
+      const ok = faceSpots.filter((s) => onScreen(s.p, 0.5));
+      if (ok.length) {
+        const s = ok[Math.floor(Math.random() * ok.length)];
+        spot.copy(s.p);
+        spotN.copy(s.n);
+        onFace = true;
+        faceSpin = rand(-0.4, 0.4);
+        return true;
+      }
+    }
     const b = env.bird();
-    const ok = spots.filter((s) => onScreen(s.p, 0.75) && (!b || s.p.distanceTo(b) > 0.45));
+    const ok = spots.filter((s) => onScreen(s.p, hero ? 0.55 : 0.75) && (!b || s.p.distanceTo(b) > 0.45) && (!hero || !env.covers(s.p.x, s.p.y + 0.22 * size)));
     if (!ok.length) return false;
     const s = ok[Math.floor(Math.random() * ok.length)];
     spot.copy(s.p);
@@ -574,10 +644,13 @@ export function createMonarch(env: MonarchEnv) {
     }
 
     if (state === 'fly' || state === 'approach') {
-      let speed = 0.42;
+      // big, it covers more ground for the same wingbeats
+      const k = hero ? 0.8 * Math.sqrt(size) : 1;
+      let speed = 0.42 * k;
       if (state === 'approach') {
-        goal.copy(spot).addScaledVector(spotN, 0.2).add(tmp.set(0, 0, 0.14));
-        speed = 0.38;
+        if (onFace) goal.copy(spot).addScaledVector(spotN, 0.3 * size);
+        else goal.copy(spot).addScaledVector(spotN, 0.2 * size).add(tmp.set(0, 0, 0.14 * size));
+        speed = 0.38 * k;
       } else if (pos.distanceTo(goal) < 0.2 || st > 9) {
         pickGoal();
         st = 0;
@@ -585,14 +658,14 @@ export function createMonarch(env: MonarchEnv) {
       flightLeft -= dt;
       if (state === 'fly' && flightLeft <= 0) {
         if (chooseSpot()) go('approach');
-        flightLeft = rand(6, 12);
+        flightLeft = hero ? rand(4, 8) : rand(6, 12);
       }
       desired.copy(goal).sub(pos);
       const d = desired.length();
       desired.multiplyScalar(speed / Math.max(d, 0.001));
-      if (state === 'approach') desired.multiplyScalar(clamp(d / 0.25, 0.35, 1));
+      if (state === 'approach') desired.multiplyScalar(clamp(d / (0.25 * size), 0.35, 1));
       // the wander: monarchs never fly a straight line
-      const w = state === 'approach' ? 0.12 : 0.32;
+      const w = (state === 'approach' ? 0.12 : 0.32) * k;
       desired.x += w * (Math.sin(t * wob[0].f + wob[0].a) + 0.6 * Math.sin(t * wob[1].f * 2.3 + wob[1].a));
       desired.y += w * (Math.sin(t * wob[2].f * 1.7 + wob[2].a) + 0.5 * Math.sin(t * wob[3].f * 3.1 + wob[3].a));
       desired.z += w * 0.7 * Math.sin(t * wob[4].f + wob[4].a);
@@ -607,8 +680,8 @@ export function createMonarch(env: MonarchEnv) {
       vel.lerp(desired, 1 - Math.exp(-dt * 2.2));
       pos.addScaledVector(vel, dt);
       // stay clear of the tag (but for the last of an approach) and inside the scene
-      if (state !== 'approach' || d > 0.3) {
-        const clear = env.half + 0.09;
+      if (state !== 'approach' || d > 0.3 * size) {
+        const clear = env.half + 0.09 * size;
         if (Math.abs(pos.z) < clear && (env.covers(pos.x, pos.y) || env.covers(pos.x, pos.y - 0.06))) {
           pos.z = pos.z < 0 && pos.z > -clear ? -clear : clear;
           vel.z = Math.abs(vel.z) * Math.sign(pos.z || 1);
@@ -617,7 +690,7 @@ export function createMonarch(env: MonarchEnv) {
       pos.x = clamp(pos.x, -2.2, 2.2);
       pos.y = clamp(pos.y, -0.25, 1.5);
       pos.z = clamp(pos.z, -0.6, 1.6);
-      if (state === 'approach' && d < 0.05) {
+      if (state === 'approach' && d < (onFace ? 0.07 : 0.05) * size) {
         from.copy(pos);
         go('descend');
       }
@@ -629,13 +702,18 @@ export function createMonarch(env: MonarchEnv) {
       pitch = lerp(pitch, 0.35 + clamp(vel.y * 0.8, -0.3, 0.4) + (flapping ? 0.18 * Math.sin(phase + 1.2) : 0), 1 - Math.exp(-dt * 8));
     } else if (state === 'takeoff') {
       const u = Math.min(st / 0.7, 1);
-      pos.copy(from).add(tmp.set(0, 0.22 * ease(u), 0.18 * ease(u)));
+      const k = hero ? 0.6 * size : 1;
+      if (onFace) pos.copy(from).addScaledVector(spotN, 0.3 * k * ease(u)).add(tmp.set(0, 0.1 * k * ease(u), 0));
+      else pos.copy(from).add(tmp.set(0, 0.22 * k * ease(u), 0.18 * k * ease(u)));
       pitch = lerp(pitch, 0.6, 1 - Math.exp(-dt * 6));
+      wallW = onFace ? 1 - ease(u) : 0;
       if (u >= 1) {
         vel.set(0, 0.15, 0.2);
         flapping = true;
         beatsLeft = 4;
-        flightLeft = rand(8, 16);
+        flightLeft = hero ? rand(4, 8) : rand(8, 16);
+        onFace = false;
+        wallW = 0;
         pickGoal();
         go('fly');
       }
@@ -643,9 +721,10 @@ export function createMonarch(env: MonarchEnv) {
       // the last little drop, wings beating slow and shallow, flaring as the feet touch
       const T = 1.3;
       const u = Math.min(st / T, 1);
-      const at = tmp.copy(spot).addScaledVector(spotN, 0.034 * L);
+      const at = tmp.copy(spot).addScaledVector(spotN, standOff());
       pos.lerpVectors(from, at, ease(u));
-      pos.y += 0.03 * Math.sin(Math.PI * u);
+      if (!onFace) pos.y += 0.03 * size * Math.sin(Math.PI * u);
+      wallW = onFace ? ease(Math.min(u * 1.25, 1)) : 0;
       target = beat(dt, lerp(5, 2.6, u), lerp(0.8, 0.4, u), lerp(0.4, 0.9, u));
       wingAngle = target;
       yaw = angleLerp(yaw, perchYaw, 1 - Math.exp(-dt * 3));
@@ -653,20 +732,28 @@ export function createMonarch(env: MonarchEnv) {
       bank = lerp(bank, 0, 1 - Math.exp(-dt * 5));
       if (u >= 1) {
         bask = clamp((wingAngle - 0.1) / 1.35, 0, 1);
-        baskGoal = 1;
-        baskNext = rand(0.8, 1.6);
-        restLeft = rand(5, 11);
+        baskGoal = onFace ? 0 : 1;
+        baskNext = onFace ? rand(2.2, 3.6) : rand(0.8, 1.6);
+        restLeft = hero ? rand(10, 18) : rand(5, 11);
         go('perched');
       }
     } else if (state === 'perched') {
       // the slow basking open and close; now and then a little shiver of the wings
       baskNext -= dt;
       if (baskNext <= 0) {
-        baskGoal = baskGoal > 0.5 ? rand(0, 0.12) : 1;
-        baskNext = baskGoal > 0.5 ? rand(1.2, 2.6) : rand(1.8, 3.4);
+        if (onFace) {
+          // on the face it basks open, closing part way now and then, so the pattern stays in view
+          baskGoal = baskGoal > 0.4 ? rand(0, 0.08) : rand(0.55, 0.85);
+          baskNext = baskGoal > 0.4 ? rand(1.0, 2.0) : rand(2.6, 4.6);
+        } else {
+          baskGoal = baskGoal > 0.5 ? rand(0, 0.12) : 1;
+          baskNext = baskGoal > 0.5 ? rand(1.2, 2.6) : rand(1.8, 3.4);
+        }
       }
       bask = lerp(bask, baskGoal, 1 - Math.exp(-dt * 1.3));
-      wingAngle = lerp(0.08, 1.46, ease(bask));
+      // on the face the wings never quite touch it
+      wingAngle = lerp(onFace ? 0.16 : 0.08, 1.46, ease(bask));
+      wallW = onFace ? 1 : 0;
       restLeft -= dt;
       const near = birdAt && birdAt.distanceTo(spot) < 0.35;
       if (restLeft <= 0 || near) {
@@ -681,8 +768,19 @@ export function createMonarch(env: MonarchEnv) {
 
     // pose
     root.position.copy(pos);
-    root.position.y += bob;
+    root.position.y += bob * size;
     root.rotation.set(-pitch, yaw, bank);
+    if (wallW > 0) {
+      // flat on the face: back along its normal, head up (turned a little round the normal)
+      by.copy(spotN);
+      bz.set(-Math.sin(faceSpin), Math.cos(faceSpin), 0);
+      bz.addScaledVector(by, -bz.dot(by)).normalize();
+      bx.crossVectors(by, bz);
+      mBasis.makeBasis(bx, by, bz);
+      qWall.setFromRotationMatrix(mBasis);
+      qE.copy(root.quaternion);
+      root.quaternion.copy(qE.slerp(qWall, wallW));
+    }
     const hindLag = state === 'perched' ? 0 : 0.06;
     for (const w of wings) {
       // the hindwing follows the forewing a moment late and a little less far
@@ -719,8 +817,9 @@ export function createMonarch(env: MonarchEnv) {
         for (const s of spots) if (Math.abs(s.p.x - x) < Math.abs(best.p.x - x)) best = s;
         spot.copy(best.p);
         spotN.copy(best.n);
+        onFace = false;
       } else if (!chooseSpot()) return false;
-      pos.copy(spot).addScaledVector(spotN, 0.034 * L);
+      pos.copy(spot).addScaledVector(spotN, 0.034 * L * size);
       perchYaw = yaw = Math.PI / 2 + rand(-0.5, 0.5);
       pitch = 0.05;
       bank = 0;
@@ -731,7 +830,81 @@ export function createMonarch(env: MonarchEnv) {
       update(1e-4);
       return true;
     },
+    /** for the screenshots: rest on the tag's front face nearest (x, y), wings held at `open` (0 open, 1 shut) */
+    landOnFace(x: number, y: number, open?: number) {
+      if (!faceSpots.length) return false;
+      let best = faceSpots[0];
+      const d2 = (s: { p: THREE.Vector3 }) => (s.p.x - x) ** 2 + (s.p.y - y) ** 2;
+      for (const s of faceSpots) if (d2(s) < d2(best)) best = s;
+      spot.copy(best.p);
+      spotN.copy(best.n);
+      onFace = true;
+      faceSpin = 0.15;
+      pos.copy(spot).addScaledVector(spotN, standOff());
+      bask = baskGoal = open ?? 0;
+      baskNext = open !== undefined ? 1e9 : 1;
+      restLeft = open !== undefined ? 1e9 : rand(10, 18);
+      go('perched');
+      update(1e-4);
+      return true;
+    },
+    faceSpotCount: faceSpots.length,
+    /** F: off the tag, or a fresh burst of flight */
+    takeOff() {
+      if (!root.visible) return;
+      if (state === 'perched') {
+        from.copy(pos);
+        flapping = true;
+        beatsLeft = 6;
+        go('takeoff');
+      } else if (state === 'fly') {
+        flapping = true;
+        beatsLeft = 6;
+        phase = 0;
+        flightLeft = hero ? rand(4, 8) : rand(6, 12);
+        pickGoal();
+      } else if (state === 'approach') {
+        onFace = false;
+        flightLeft = hero ? rand(4, 8) : rand(6, 12);
+        pickGoal();
+        go('fly');
+      }
+    },
+    /** the Monarch pick: large, the subject itself (true), or the small ambient extra (false) */
+    setHero(on: boolean, s = 2.5) {
+      if (on === hero) {
+        if (on) this.setSize(s);
+        return;
+      }
+      hero = on;
+      this.setSize(on ? s : 1);
+      // fly in from the right, into the middle of the picture, and land soon after
+      onFace = false;
+      wallW = 0;
+      if (on) pos.set(1.25, 0.55, 1.2);
+      else pos.set(1.3, 0.8, 0.9);
+      vel.set(-0.35, 0.02, 0.05);
+      flapping = true;
+      beatsLeft = 4;
+      flightLeft = on ? rand(2, 3.5) : rand(4, 8);
+      pickGoal();
+      go('fly');
+    },
+    setSize(s: number) {
+      size = s;
+      root.scale.setScalar(s);
+    },
+    get size() { return size; },
+    get hero() { return hero; },
+    get onFace() { return onFace; },
+    get perched() { return state === 'perched'; },
+    get flying() { return state !== 'perched' && root.visible; },
+    headPosition(out: THREE.Vector3) {
+      return head.getWorldPosition(out);
+    },
     flyAt(p: THREE.Vector3, wings?: number) {
+      onFace = false;
+      wallW = 0;
       pos.copy(p);
       vel.set(-0.35, 0.02, 0.05);
       yaw = Math.atan2(vel.x, vel.z);
